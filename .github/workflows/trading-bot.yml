@@ -39,6 +39,7 @@ jobs:
       - name: 🤖 Exécution du bot
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_HEARTBEAT_WEBHOOK_URL: ${{ secrets.DISCORD_HEARTBEAT_WEBHOOK_URL }}
           SYMBOL: 'BTC/USDT'
           TIMEFRAME: '5m'
           SEND_HEARTBEAT: 'true'
