@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime
 
 class DataFetcher:
-    def __init__(self, exchange_name='binance', symbol='BTC/USDT'):
+    def __init__(self, exchange_name='kraken', symbol='BTC/USDT'):
         self.exchange = getattr(ccxt, exchange_name)({
             'enableRateLimit': True
         })

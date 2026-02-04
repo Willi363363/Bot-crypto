@@ -1,15 +1,15 @@
 """
-Test de connexion à l'API Binance et récupération des données
+Test de connexion à l'API Kraken et récupération des données
 """
 import ccxt
 from datetime import datetime
 
-def test_binance_connection():
-    print("🔄 Connexion à Binance...")
+def test_kraken_connection():
+    print("🔄 Connexion à Kraken...")
 
     try:
         # Initialisation de l'exchange (pas besoin d'API key pour données publiques)
-        exchange = ccxt.binance({
+        exchange = ccxt.kraken({
             'enableRateLimit': True,  # Respecte les limites de l'API
         })
 
@@ -44,4 +44,4 @@ def test_binance_connection():
         return False
 
 if __name__ == "__main__":
-    test_binance_connection()
+    test_kraken_connection()
