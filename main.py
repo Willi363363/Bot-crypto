@@ -1,5 +1,5 @@
 """
-Bot de Trading - Avec gestion d'état
+Bot de Trading - Avec heartbeat corrigé
 """
 from src.data_fetcher import DataFetcher
 from src.indicators import TechnicalIndicators
@@ -18,6 +18,7 @@ def analyze_market():
     symbol = os.getenv('SYMBOL', 'BTC/USDT')
     timeframe = os.getenv('TIMEFRAME', '1h')
     exchange_name = os.getenv('EXCHANGE', 'kraken')
+    send_heartbeat = os.getenv('SEND_HEARTBEAT', 'false').lower() == 'true'
 
     print(f"\n{'='*60}")
     print(f"🤖 BOT ACTIF - Analyse en cours...")
@@ -28,14 +29,21 @@ def analyze_market():
     print(f"{'='*60}\n")
 
     # Initialisation
-    fetcher = DataFetcher(symbol=symbol)
+    fetcher = DataFetcher(exchange_name=exchange_name, symbol=symbol)
     state_manager = StateManager()
+    notifier = DiscordNotifier()
 
     # Récupération des données
     df = fetcher.get_ohlcv(timeframe=timeframe, limit=200)
 
     if df is None:
         print("❌ Impossible de récupérer les données")
+        if send_heartbeat:
+            notifier.send_message(
+                title="❌ Erreur Bot Trading",
+                description="Impossible de récupérer les données du marché",
+                color=0xff0000
+            )
         return
 
     # Calcul des indicateurs
@@ -62,15 +70,15 @@ def analyze_market():
     # Détermination du signal actuel
     current_signal = None
 
-    # Logique ACHAT : Tendance haussière + RSI < 70 + Crossover EMA
+    # Logique ACHAT
     if (last['trend'] == 'BULLISH' and 
         last['rsi'] < 70 and 
-        last['rsi'] > 30 and  # Pas en survente non plus
+        last['rsi'] > 30 and
         prev['ema_20'] <= prev['ema_50'] and last['ema_20'] > last['ema_50']):
         current_signal = 'BUY'
 
-    # Logique VENTE : Tendance baissière OU RSI surachat OU Crossover baissier
-    elif (last['trend'] == 'BEARISH' or
+    # Logique VENTE
+    elif (last['trend'] == 'BEARISH' or 
           last['rsi'] > 75 or
           (prev['ema_20'] >= prev['ema_50'] and last['ema_20'] < last['ema_50'])):
         current_signal = 'SELL'
@@ -80,12 +88,17 @@ def analyze_market():
 
     print(f"🎯 Signal détecté : {current_signal}")
 
+    # ═══════════════════════════════════════════════════════════
+    # INITIALISATION DES VARIABLES (IMPORTANT !)
+    # ═══════════════════════════════════════════════════════════
+    signal_sent = False
+    status = "⚪ Marché neutre - En surveillance"
+    heartbeat_color = 0x808080  # Gris par défaut
+
     # Vérification si on doit envoyer le signal
     if current_signal != 'NEUTRAL':
         if state_manager.should_send_signal(current_signal):
-            # ENVOI DU SIGNAL
-            notifier = DiscordNotifier()
-
+            # NOUVEAU SIGNAL À ENVOYER
             if current_signal == 'BUY':
                 print("\n🟢 ENVOI SIGNAL D'ACHAT")
                 notifier.send_buy_signal(
@@ -98,6 +111,9 @@ def analyze_market():
                         'ema_50': f"${last['ema_50']:,.2f}"
                     }
                 )
+                status = "🟢 Nouveau signal BUY envoyé"
+                heartbeat_color = 0x00ff00
+
             elif current_signal == 'SELL':
                 print("\n🔴 ENVOI SIGNAL DE VENTE")
                 notifier.send_sell_signal(
@@ -110,13 +126,39 @@ def analyze_market():
                         'ema_50': f"${last['ema_50']:,.2f}"
                     }
                 )
+                status = "🔴 Nouveau signal SELL envoyé"
+                heartbeat_color = 0xff0000
 
-            # Mise à jour de l'état
             state_manager.update_signal(current_signal, last['close'])
+            signal_sent = True
+
         else:
+            # SIGNAL DÉJÀ ACTIF
             print(f"\n⚪ Signal {current_signal} déjà envoyé - Pas de nouveau message")
-    else:
-        print("\n⚪ Marché neutre - Aucun signal")
+
+            if current_signal == 'BUY':
+                status = "🟢 Signal BUY actif (déjà envoyé)"
+                heartbeat_color = 0x90EE90  # Vert clair
+            elif current_signal == 'SELL':
+                status = "🔴 Signal SELL actif (déjà envoyé)"
+                heartbeat_color = 0xFFB6C1  # Rouge clair
+
+    # ═══════════════════════════════════════════════════════════
+    # HEARTBEAT : Notification de santé du bot
+    # ═══════════════════════════════════════════════════════════
+    if send_heartbeat and not signal_sent:
+        # Envoi d'un message léger pour confirmer que le bot tourne
+        notifier.send_heartbeat(
+            title=f"💓 Bot actif - {symbol}",
+            description=status,
+            color=heartbeat_color,
+            fields=[
+                {"name": "💰 Prix", "value": f"${last['close']:,.2f}", "inline": True},
+                {"name": "📊 RSI", "value": f"{last['rsi']:.2f}", "inline": True},
+                {"name": "📈 Tendance", "value": last['trend'], "inline": True},
+                {"name": "🕐 Heure", "value": datetime.now().strftime('%H:%M:%S'), "inline": False}
+            ]
+        )
 
     print(f"\n{'='*60}\n")
 

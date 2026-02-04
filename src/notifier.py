@@ -9,8 +9,33 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class DiscordNotifier:
-    def __init__(self, webhook_url=None):
+    def __init__(self, webhook_url=None, heartbeat_webhook_url=None):
         self.webhook_url = webhook_url or os.getenv('DISCORD_WEBHOOK_URL')
+        self.heartbeat_webhook_url = heartbeat_webhook_url or os.getenv('DISCORD_HEARTBEAT_WEBHOOK_URL', self.webhook_url)
+
+    def send_heartbeat(self, title, description, color=0x808080, fields=None):
+        """Envoie un heartbeat sur le canal dédié"""
+        embed = {
+            "title": title,
+            "description": description,
+            "color": color,
+            "timestamp": datetime.utcnow().isoformat(),
+            "footer": {"text": "Trading Bot 💓"}
+        }
+
+        if fields:
+            embed["fields"] = fields
+
+        data = {"embeds": [embed]}
+
+        try:
+            response = requests.post(self.heartbeat_webhook_url, json=data)
+            if response.status_code == 204:
+                print("✅ Heartbeat envoyé")
+                return True
+        except Exception as e:
+            print(f"❌ Erreur heartbeat: {e}")
+            return False
 
     def send_message(self, title, description, color=0x00ff00, fields=None):
         """

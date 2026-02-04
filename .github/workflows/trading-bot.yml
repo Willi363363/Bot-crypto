@@ -41,6 +41,7 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SYMBOL: 'BTC/USDT'
           TIMEFRAME: '5m'
+          SEND_HEARTBEAT: 'true'
         run: |
           echo "🚀 Démarrage de l'analyse..."
           python main.py
