@@ -1,0 +1,53 @@
+name: Trading Bot - Analyse horaire
+
+on:
+  schedule:
+    # Exécution toutes les heures (à la minute 5)
+    - cron: '*/1 * * * *'
+
+  # Permet aussi le déclenchement manuel
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout du code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Configuration Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Installation des dépendances
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Récupération de l'état précédent (s'il existe)
+      - name: 📂 Téléchargement de l'état précédent
+        uses: actions/cache@v4
+        with:
+          path: state.json
+          key: bot-state-${{ github.run_id }}
+          restore-keys: |
+            bot-state-
+
+      - name: 🤖 Exécution du bot
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SYMBOL: 'BTC/USDT'
+          TIMEFRAME: '1h'
+        run: |
+          python main.py
+
+      # Sauvegarde du nouvel état
+      - name: 💾 Sauvegarde de l'état
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: state.json
+          key: bot-state-${{ github.run_id }}
