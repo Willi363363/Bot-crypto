@@ -17,10 +17,14 @@ def analyze_market():
     # Configuration
     symbol = os.getenv('SYMBOL', 'BTC/USDT')
     timeframe = os.getenv('TIMEFRAME', '1h')
+    exchange_name = os.getenv('EXCHANGE', 'kraken')
 
     print(f"\n{'='*60}")
-    print(f"🤖 Analyse - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"📊 Paire: {symbol} | Timeframe: {timeframe}")
+    print(f"🤖 BOT ACTIF - Analyse en cours...")
+    print(f"🕐 Heure: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"📊 Exchange: {exchange_name}")
+    print(f"📊 Paire: {symbol}")
+    print(f"📊 Timeframe: {timeframe}")
     print(f"{'='*60}\n")
 
     # Initialisation

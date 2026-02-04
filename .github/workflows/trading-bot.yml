@@ -3,7 +3,7 @@ name: Trading Bot - Analyse horaire
 on:
   schedule:
     # Exécution toutes les heures (à la minute 5)
-    - cron: '*/1 * * * *'
+    - cron: '*/5 * * * *'
 
   # Permet aussi le déclenchement manuel
   workflow_dispatch:
@@ -40,9 +40,11 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SYMBOL: 'BTC/USDT'
-          TIMEFRAME: '1h'
+          TIMEFRAME: '5m'
         run: |
+          echo "🚀 Démarrage de l'analyse..."
           python main.py
+          echo "✅ Analyse terminée"
 
       # Sauvegarde du nouvel état
       - name: 💾 Sauvegarde de l'état
