@@ -11,7 +11,7 @@ load_dotenv()
 class DiscordNotifier:
     def __init__(self, webhook_url=None, heartbeat_webhook_url=None):
         self.webhook_url = webhook_url or os.getenv('DISCORD_WEBHOOK_URL')
-        self.heartbeat_webhook_url = heartbeat_webhook_url or os.getenv('DISCORD_HEARTBEAT_WEBHOOK_URL', self.webhook_url)
+        self.heartbeat_webhook_url = heartbeat_webhook_url or os.getenv('DISCORD_HEARTBEAT_WEBHOOK_URL')
 
     def send_heartbeat(self, title, description, color=0x808080, fields=None):
         """Envoie un heartbeat sur le canal dédié"""
