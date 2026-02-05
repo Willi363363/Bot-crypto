@@ -147,7 +147,17 @@ def analyze_market():
     # HEARTBEAT : Notification de santé du bot
     # ═══════════════════════════════════════════════════════════
     if send_heartbeat and not signal_sent:
-        # Envoi d'un message léger pour confirmer que le bot tourne
+        # Détermination de l'emoji selon la tendance
+        if last['trend'] == 'BULLISH':
+            trend_emoji = "📈"  # Graphique qui monte
+            trend_display = f"{trend_emoji} BULLISH"
+        elif last['trend'] == 'BEARISH':
+            trend_emoji = "📉"  # Graphique qui descend
+            trend_display = f"{trend_emoji} BEARISH"
+        else:
+            trend_emoji = "➡️"  # Flèche horizontale pour neutre
+            trend_display = f"{trend_emoji} NEUTRAL"
+
         notifier.send_heartbeat(
             title=f"💓 Bot actif - {symbol}",
             description=status,
@@ -155,7 +165,7 @@ def analyze_market():
             fields=[
                 {"name": "💰 Prix", "value": f"${last['close']:,.2f}", "inline": True},
                 {"name": "📊 RSI", "value": f"{last['rsi']:.2f}", "inline": True},
-                {"name": "📈 Tendance", "value": last['trend'], "inline": True},
+                {"name": "Tendance", "value": trend_display, "inline": True},
                 {"name": "🕐 Heure", "value": datetime.now().strftime('%H:%M:%S'), "inline": False}
             ]
         )
