@@ -23,15 +23,88 @@ class TechnicalIndicators:
         return rsi
 
     @staticmethod
-    def add_all_indicators(df):
+    def calculate_choppiness(df, period=14):
+        """Choppiness Index (CHOP)"""
+        high = df['high']
+        low = df['low']
+        close = df['close']
+
+        prev_close = close.shift(1)
+        true_range = pd.concat(
+            [
+                (high - low),
+                (high - prev_close).abs(),
+                (low - prev_close).abs()
+            ],
+            axis=1
+        ).max(axis=1)
+
+        atr_sum = true_range.rolling(window=period).sum()
+        highest_high = high.rolling(window=period).max()
+        lowest_low = low.rolling(window=period).min()
+
+        price_range = (highest_high - lowest_low)
+        chop = 100 * np.log10(atr_sum / price_range) / np.log10(period)
+        chop = chop.replace([np.inf, -np.inf], np.nan)
+
+        return chop
+
+    @staticmethod
+    def calculate_atr(df, period=14):
+        """Average True Range (ATR)"""
+        high = df['high']
+        low = df['low']
+        close = df['close']
+
+        prev_close = close.shift(1)
+        true_range = pd.concat(
+            [
+                (high - low),
+                (high - prev_close).abs(),
+                (low - prev_close).abs()
+            ],
+            axis=1
+        ).max(axis=1)
+
+        atr = true_range.rolling(window=period).mean()
+        return atr
+
+    @staticmethod
+    def add_support_resistance(df, lookback=50):
+        """Ajoute des niveaux simples de support / résistance (rolling)"""
+        df['support'] = df['low'].rolling(window=lookback, min_periods=lookback).min().shift(1)
+        df['resistance'] = df['high'].rolling(window=lookback, min_periods=lookback).max().shift(1)
+        return df
+
+    @staticmethod
+    def add_all_indicators(df, chop_period=14, sr_lookback=50, atr_period=14):
         """Ajoute tous les indicateurs au DataFrame"""
         # EMAs
         df['ema_20'] = TechnicalIndicators.calculate_ema(df, 20)
         df['ema_50'] = TechnicalIndicators.calculate_ema(df, 50)
         df['ema_200'] = TechnicalIndicators.calculate_ema(df, 200)
 
+        # Pente EMA200
+        df['ema_200_slope'] = df['ema_200'].diff()
+        df['ema_50_slope'] = df['ema_50'].diff()
+        df['ema_200_slope_10'] = df['ema_200'].diff(10)
+        df['ema_50_slope_10'] = df['ema_50'].diff(10)
+
         # RSI
         df['rsi'] = TechnicalIndicators.calculate_rsi(df, 14)
+        df['rsi_delta'] = df['rsi'].diff()
+
+        # Volume
+        df['volume_sma_20'] = df['volume'].rolling(window=20).mean()
+
+        # Choppiness Index
+        df['chop'] = TechnicalIndicators.calculate_choppiness(df, chop_period)
+
+        # ATR
+        df['atr'] = TechnicalIndicators.calculate_atr(df, atr_period)
+
+        # Supports / résistances
+        df = TechnicalIndicators.add_support_resistance(df, lookback=sr_lookback)
 
         # Tendance simple (EMA 20 > 50)
         df['trend'] = np.where(df['ema_20'] > df['ema_50'], 'BULLISH', 'BEARISH')

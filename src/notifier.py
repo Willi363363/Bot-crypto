@@ -115,6 +115,19 @@ class DiscordNotifier:
             {"name": "📈 Tendance", "value": indicators.get('trend', 'N/A'), "inline": True}
         ]
 
+        extra_fields = [
+            ("EMA 20", indicators.get('ema_20')),
+            ("EMA 50", indicators.get('ema_50')),
+            ("EMA 200", indicators.get('ema_200')),
+            ("CHOP", indicators.get('chop')),
+            ("Support", indicators.get('support')),
+            ("Résistance", indicators.get('resistance'))
+        ]
+
+        for name, value in extra_fields:
+            if value not in (None, "N/A"):
+                fields.append({"name": name, "value": f"{value}", "inline": True})
+
         self.send_message(
             title=f"🟢 SIGNAL ACHAT - {symbol}" + (" [TEST]" if self.test_mode else ""),
             description="Conditions d'achat remplies !",
@@ -129,6 +142,19 @@ class DiscordNotifier:
             {"name": "📊 RSI", "value": f"{indicators.get('rsi', 'N/A')}", "inline": True},
             {"name": "📉 Tendance", "value": indicators.get('trend', 'N/A'), "inline": True}
         ]
+
+        extra_fields = [
+            ("EMA 20", indicators.get('ema_20')),
+            ("EMA 50", indicators.get('ema_50')),
+            ("EMA 200", indicators.get('ema_200')),
+            ("CHOP", indicators.get('chop')),
+            ("Support", indicators.get('support')),
+            ("Résistance", indicators.get('resistance'))
+        ]
+
+        for name, value in extra_fields:
+            if value not in (None, "N/A"):
+                fields.append({"name": name, "value": f"{value}", "inline": True})
 
         self.send_message(
             title=f"🔴 SIGNAL VENTE - {symbol}" + (" [TEST]" if self.test_mode else ""),

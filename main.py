@@ -5,6 +5,7 @@ from src.data_fetcher import DataFetcher
 from src.indicators import TechnicalIndicators
 from src.notifier import DiscordNotifier
 from src.state_manager import StateManager
+from src.strategy import Strategy
 from dotenv import load_dotenv
 import os
 from datetime import datetime
@@ -19,6 +20,7 @@ def analyze_market():
     timeframe = os.getenv('TIMEFRAME', '1h')
     exchange_name = os.getenv('EXCHANGE', 'kraken')
     send_heartbeat = os.getenv('SEND_HEARTBEAT', 'false').lower() == 'true'
+    data_limit = int(os.getenv('DATA_LIMIT', '500'))
 
     print(f"\n{'='*60}")
     print(f"🤖 BOT ACTIF - Analyse en cours...")
@@ -34,7 +36,7 @@ def analyze_market():
     notifier = DiscordNotifier()
 
     # Récupération des données
-    df = fetcher.get_ohlcv(timeframe=timeframe, limit=200)
+    df = fetcher.get_ohlcv(timeframe=timeframe, limit=max(260, data_limit))
 
     if df is None:
         print("❌ Impossible de récupérer les données")
@@ -49,9 +51,8 @@ def analyze_market():
     # Calcul des indicateurs
     df = TechnicalIndicators.add_all_indicators(df)
 
-    # Dernières valeurs
-    last = df.iloc[-1]
-    prev = df.iloc[-2]
+    # Dernière bougie clôturée (évite la bougie en cours)
+    last = df.iloc[-2]
 
     # Affichage de l'analyse
     print(f"📈 Situation actuelle :")
@@ -60,6 +61,9 @@ def analyze_market():
     print(f"   EMA 50    : ${last['ema_50']:,.2f}")
     print(f"   EMA 200   : ${last['ema_200']:,.2f}")
     print(f"   RSI       : {last['rsi']:.2f}")
+    print(f"   CHOP      : {last['chop']:.2f}")
+    print(f"   Support   : {last['support']:.2f}" if last['support'] == last['support'] else "   Support   : N/A")
+    print(f"   Résistance: {last['resistance']:.2f}" if last['resistance'] == last['resistance'] else "   Résistance: N/A")
     print(f"   Tendance  : {last['trend']}")
     print(f"   Volume    : {last['volume']:,.2f}")
 
@@ -67,26 +71,12 @@ def analyze_market():
     last_signal = state_manager.get_last_signal()
     print(f"\n🔔 Dernier signal envoyé : {last_signal if last_signal else 'Aucun'}")
 
-    # Détermination du signal actuel
-    current_signal = None
-
-    # Logique ACHAT
-    if (last['trend'] == 'BULLISH' and 
-        last['rsi'] < 70 and 
-        last['rsi'] > 30 and
-        prev['ema_20'] <= prev['ema_50'] and last['ema_20'] > last['ema_50']):
-        current_signal = 'BUY'
-
-    # Logique VENTE
-    elif (last['trend'] == 'BEARISH' or 
-          last['rsi'] > 75 or
-          (prev['ema_20'] >= prev['ema_50'] and last['ema_20'] < last['ema_50'])):
-        current_signal = 'SELL'
-
-    else:
-        current_signal = 'NEUTRAL'
+    # Détermination du signal actuel via la stratégie 1h
+    strategy_signal = Strategy.generate_signal(df)
+    current_signal = strategy_signal.signal
 
     print(f"🎯 Signal détecté : {current_signal}")
+    print(f"🧠 Raison         : {strategy_signal.reason}")
 
     # ═══════════════════════════════════════════════════════════
     # INITIALISATION DES VARIABLES (IMPORTANT !)
@@ -106,9 +96,13 @@ def analyze_market():
                     price=last['close'],
                     indicators={
                         'rsi': f"{last['rsi']:.2f}",
-                        'trend': last['trend'],
+                        'trend': strategy_signal.context.get('trend', last['trend']),
                         'ema_20': f"${last['ema_20']:,.2f}",
-                        'ema_50': f"${last['ema_50']:,.2f}"
+                        'ema_50': f"${last['ema_50']:,.2f}",
+                        'ema_200': f"${last['ema_200']:,.2f}",
+                        'chop': f"{last['chop']:.2f}",
+                        'support': f"${last['support']:,.2f}" if last['support'] == last['support'] else "N/A",
+                        'resistance': f"${last['resistance']:,.2f}" if last['resistance'] == last['resistance'] else "N/A"
                     }
                 )
                 status = "🟢 Nouveau signal BUY envoyé"
@@ -121,9 +115,13 @@ def analyze_market():
                     price=last['close'],
                     indicators={
                         'rsi': f"{last['rsi']:.2f}",
-                        'trend': last['trend'],
+                        'trend': strategy_signal.context.get('trend', last['trend']),
                         'ema_20': f"${last['ema_20']:,.2f}",
-                        'ema_50': f"${last['ema_50']:,.2f}"
+                        'ema_50': f"${last['ema_50']:,.2f}",
+                        'ema_200': f"${last['ema_200']:,.2f}",
+                        'chop': f"{last['chop']:.2f}",
+                        'support': f"${last['support']:,.2f}" if last['support'] == last['support'] else "N/A",
+                        'resistance': f"${last['resistance']:,.2f}" if last['resistance'] == last['resistance'] else "N/A"
                     }
                 )
                 status = "🔴 Nouveau signal SELL envoyé"
@@ -169,7 +167,10 @@ def analyze_market():
             fields=[
                 {"name": "💰 Prix", "value": f"${last['close']:,.2f}", "inline": True},
                 {"name": "📊 RSI", "value": f"{last['rsi']:.2f}", "inline": True},
+                {"name": "🧭 CHOP", "value": f"{last['chop']:.2f}", "inline": True},
                 {"name": "Tendance", "value": trend_display, "inline": True},
+                {"name": "Support", "value": f"${last['support']:,.2f}" if last['support'] == last['support'] else "N/A", "inline": True},
+                {"name": "Résistance", "value": f"${last['resistance']:,.2f}" if last['resistance'] == last['resistance'] else "N/A", "inline": True},
                 {"name": "🕐 Heure", "value": discord_time, "inline": False}
             ]
         )
