@@ -158,6 +158,10 @@ def analyze_market():
             trend_emoji = "➡️"  # Flèche horizontale pour neutre
             trend_display = f"{trend_emoji} NEUTRAL"
 
+        import time
+        current_timestamp = int(time.time())
+        discord_time = f"<t:{current_timestamp}:T>"
+
         notifier.send_heartbeat(
             title=f"💓 Bot actif - {symbol}",
             description=status,
@@ -166,7 +170,7 @@ def analyze_market():
                 {"name": "💰 Prix", "value": f"${last['close']:,.2f}", "inline": True},
                 {"name": "📊 RSI", "value": f"{last['rsi']:.2f}", "inline": True},
                 {"name": "Tendance", "value": trend_display, "inline": True},
-                {"name": "🕐 Heure", "value": datetime.now().strftime('%H:%M:%S'), "inline": False}
+                {"name": "🕐 Heure", "value": discord_time, "inline": False}
             ]
         )
 
