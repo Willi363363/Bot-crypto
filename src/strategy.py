@@ -45,7 +45,7 @@ class Strategy:
 		price = last.get('close')
 		volume = last.get('volume')
 		volume_sma_20 = last.get('volume_sma_20')
-        
+
 		prev_close = prev.get('close')
 
 		trend_bull = ema_20 > ema_50 > ema_200
