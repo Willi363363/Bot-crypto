@@ -34,10 +34,10 @@ def main():
             df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
             df.set_index('timestamp', inplace=True)
         else:
-            # Compatibilité si l'index a été sauvegardé sans nom
-            index_col = df.columns[0]
-            df[index_col] = pd.to_datetime(df[index_col], utc=True)
-            df.set_index(index_col, inplace=True)
+            # Compatibilité : première colonne considérée comme timestamp si pas de nom
+            first_col = df.columns[0]
+            df[first_col] = pd.to_datetime(df[first_col], utc=True)
+            df.set_index(first_col, inplace=True)
             df.index.name = 'timestamp'
     else:
         print(f"🚀 Récupération historique {symbol} en {timeframe} depuis {start_date} (source: {hist_exchange_name})...")
@@ -55,56 +55,53 @@ def main():
 
     print(f"✅ {len(df)} bougies prêtes pour la grille.")
 
-    # Grille raisonnable (16 combinaisons)
-    chop_trend_max_vals = [55, 60]
-    chop_range_min_vals = [65, 70]
-    ema_gap_min_vals = [0.0006, 0.0010]
-    atr_pct_min_vals = [0.001, 0.002]
-    rsi_pullback_long_vals = [48]
-    rsi_pullback_short_vals = [52]
+    # Grille étendue (tous les paramètres clés du .env). Ajuste les listes selon ton besoin.
+    param_grid = {
+        "VOLUME_RATIO_MIN": [0.70, 0.80, 0.90],
+        "VOLUME_SPIKE_MIN": [1.25, 1.40, 1.55],
+        "CHOP_NO_TRADE_MAX": [52, 55, 58, 60],
+        "ATR_PCT_MIN": [0.0035, 0.0045, 0.0055],
+        "ATR_EXTREME_MULT": [2.5, 3.0, 3.5],
+        "RSI_MIN": [36, 38, 40, 42],
+        "RSI_MAX": [58, 60, 62, 64],
+        "ATR_STOP_MULT": [1.8, 2.0, 2.2],
+        "TP1_MULT": [1.6, 1.85, 2.0],
+        "TP2_MULT": [3.0, 3.3, 3.6],
+        "COOLDOWN_BARS": [10, 14, 16, 18],
+        "COOLDOWN_BARS_SL": [16, 20, 22, 24],
+        "TIME_STOP_BARS": [24, 28, 32, 36],
+        "RISK_PER_TRADE": [0.0025, 0.004, 0.006, 0.008],
+        "REQUIRE_VOLUME_SPIKE": ["true", "false"],
+    }
 
-    max_combos = int(os.getenv('MAX_COMBOS', '16'))
+    max_combos_env = os.getenv('MAX_COMBOS')
+    max_combos = int(max_combos_env) if max_combos_env else None
+
+    key_list = list(param_grid.keys())
+    value_lists = [param_grid[k] for k in key_list]
+    combos = list(itertools.product(*value_lists))
+    total = len(combos)
+    if max_combos:
+        combos = combos[:max_combos]
+        total = len(combos)
+    print(f"🔍 Exploration de {total} combinaisons (MAX_COMBOS={'∞' if not max_combos_env else max_combos}).")
 
     results = []
-
-    combos = list(itertools.product(
-        chop_trend_max_vals,
-        chop_range_min_vals,
-        ema_gap_min_vals,
-        atr_pct_min_vals,
-        rsi_pullback_long_vals,
-        rsi_pullback_short_vals,
-    ))[:max_combos]
-
     for idx, vals in enumerate(combos, 1):
-        (chop_trend_max, chop_range_min, ema_gap_min, atr_pct_min, rsi_pullback_long, rsi_pullback_short) = vals
-
-        os.environ['CHOP_TREND_MAX'] = str(chop_trend_max)
-        os.environ['CHOP_RANGE_MIN'] = str(chop_range_min)
-        os.environ['EMA_GAP_MIN'] = str(ema_gap_min)
-        os.environ['ATR_PCT_MIN'] = str(atr_pct_min)
-        os.environ['RSI_PULLBACK_LONG_MIN'] = str(rsi_pullback_long)
-        os.environ['RSI_PULLBACK_SHORT_MAX'] = str(rsi_pullback_short)
-        os.environ['USE_RANGE'] = 'false'
-
+        for k, v in zip(key_list, vals):
+            os.environ[k] = str(v)
         trades, _ = compute_trades(df)
         stats = compute_stats(trades, "Depuis le début", initial_capital)
-
-        results.append((stats['final_capital'], stats['total_return'], stats['trades'], vals))
-
-        if idx % 4 == 0 or idx == len(combos):
-            print(f"Progression: {idx}/{len(combos)} combinaisons")
+        results.append((stats['final_capital'], stats['total_return'], stats['trades'], dict(zip(key_list, vals))))
+        if idx % 25 == 0 or idx == total:
+            print(f"Progression: {idx}/{total} combinaisons ({idx/total*100:.1f}%)")
 
     results.sort(reverse=True, key=lambda x: x[0])
 
-    print("\nTop 10 configurations par capital final (Depuis le début):")
-    for rank, (final_cap, total_return, trades, vals) in enumerate(results[:10], 1):
-        chop_trend_max, chop_range_min, ema_gap_min, atr_pct_min, rsi_pullback_long, rsi_pullback_short = vals
-        print(
-            f"{rank:02d} | Capital: {final_cap:.2f} € | Retour: {total_return*100:.2f}% | Trades: {trades} | "
-            f"CHOP_TREND_MAX={chop_trend_max} CHOP_RANGE_MIN={chop_range_min} EMA_GAP_MIN={ema_gap_min} "
-            f"ATR_PCT_MIN={atr_pct_min} RSI_PULLBACK_LONG_MIN={rsi_pullback_long} RSI_PULLBACK_SHORT_MAX={rsi_pullback_short}"
-        )
+    print("\nTop 20 configurations par capital final (Depuis le début):")
+    for rank, (final_cap, total_return, trades, param_set) in enumerate(results[:20], 1):
+        params_str = " ".join(f"{k}={v}" for k, v in param_set.items())
+        print(f"{rank:02d} | Capital: {final_cap:.2f} € | Retour: {total_return*100:.2f}% | Trades: {trades} | {params_str}")
 
 
 if __name__ == "__main__":
