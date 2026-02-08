@@ -5,7 +5,7 @@ from src.data_fetcher import DataFetcher
 from src.indicators import TechnicalIndicators
 from src.notifier import DiscordNotifier
 from src.state_manager import StateManager
-from src.strategy import Strategy
+from src.strategy import ImprovedStrategy
 from dotenv import load_dotenv
 import os
 from datetime import datetime
@@ -72,7 +72,7 @@ def analyze_market():
     print(f"\n🔔 Dernier signal envoyé : {last_signal if last_signal else 'Aucun'}")
 
     # Détermination du signal actuel via la stratégie 1h
-    strategy_signal = Strategy.generate_signal(df)
+    strategy_signal = ImprovedStrategy.generate_signal(df)
     current_signal = strategy_signal.signal
 
     print(f"🎯 Signal détecté : {current_signal}")

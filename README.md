@@ -158,6 +158,14 @@ COOLDOWN_BARS=3
 LONG_ONLY=true
 ```
 
+## Configuration (défaut)
+- Exchange: `kraken`, Pair: `BTC/USDT`, Timeframe: `1h`
+- Volume: `VOLUME_RATIO_MIN=0.98`, `VOLUME_SPIKE_MIN=1.40`
+- Volatilité/filtre chop: `CHOP_NO_TRADE_MAX=48`, `ATR_PCT_MIN=0.0065`, `ATR_EXPANSION_MULT=1.15`
+- Gestion du risque: `ATR_STOP_MULT=0.95`, `TP1_MULT=1.8`, `TP2_MULT=3.4`
+- Cooldown: `COOLDOWN_BARS=10`, `COOLDOWN_BARS_SL=18`, `TIME_STOP_BARS=36`
+- Backtest: `HIST_EXCHANGE=binance`, `START_DATE=2024-01-01`, `FEE_RATE=0.0005`, `SLIPPAGE_BPS=0.00025`
+
 ## ⚠️ Avertissements
 
 Ce bot est fourni à titre éducatif. Ne tradez pas avec de l'argent réel sans avoir testé et validé la stratégie.

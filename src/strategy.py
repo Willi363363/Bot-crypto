@@ -1,212 +1,151 @@
 """
-Stratégie de trading 1h basée sur EMA, RSI, CHOP et supports/résistances.
-Paramètres ajustables via variables d'environnement.
+Stratégie 1h améliorée : Trend-following multi-confirmation
 """
 from dataclasses import dataclass
 import os
+import numpy as np
 
 
 @dataclass
 class StrategySignal:
-	signal: str
-	reason: str
-	context: dict
+    signal: str
+    reason: str
+    context: dict
+    stop_loss: float = None
+    take_profit_1: float = None
+    take_profit_2: float = None
 
 
-class Strategy:
-	@staticmethod
-	def generate_signal(df):
-		"""
-		Génère un signal BUY / SELL / NEUTRAL à partir des données et indicateurs.
-		"""
-		if df is None or len(df) < 260:
-			return StrategySignal(
-				signal="NEUTRAL",
-				reason="Pas assez de données pour la stratégie 1h",
-				context={}
-			)
+class ImprovedStrategy:
+    
+    @staticmethod
+    def generate_signal(df):
+        """Génère un signal BUY/SELL/NEUTRAL."""
+        if df is None or len(df) < 220:
+            return StrategySignal(signal="NEUTRAL", reason="Données insuffisantes", context={})
 
-		last = df.iloc[-2]
-		prev = df.iloc[-3]
+        last = df.iloc[-2]
+        prev = df.iloc[-3]
+        prev2 = df.iloc[-4]
 
-		ema_20 = last.get('ema_20')
-		ema_50 = last.get('ema_50')
-		ema_200 = last.get('ema_200')
-		ema_200_slope = last.get('ema_200_slope')
-		ema_50_slope = last.get('ema_50_slope')
-		ema_200_slope_10 = last.get('ema_200_slope_10')
-		ema_50_slope_10 = last.get('ema_50_slope_10')
-		rsi = last.get('rsi')
-		rsi_delta = last.get('rsi_delta')
-		chop = last.get('chop')
-		atr = last.get('atr')
-		support = last.get('support')
-		resistance = last.get('resistance')
-		price = last.get('close')
-		volume = last.get('volume')
-		volume_sma_20 = last.get('volume_sma_20')
+        def _env_bool(name: str, default: bool) -> bool:
+            value = os.getenv(name)
+            if value is None:
+                return default
+            return value.strip().lower() in ("1", "true", "yes", "y", "on")
 
-		prev_close = prev.get('close')
+        vol_floor = float(os.getenv('VOLUME_RATIO_MIN', '0.95'))
+        vol_spike = float(os.getenv('VOLUME_SPIKE_MIN', '1.3'))
+        chop_block = float(os.getenv('CHOP_NO_TRADE_MAX', '70'))
+        atr_silence = float(os.getenv('ATR_PCT_MIN', '0.005'))
+        atr_expansion_mult = float(os.getenv('ATR_EXPANSION_MULT', '1.05'))
+        atr_stop_mult = float(os.getenv('ATR_STOP_MULT', '1.0'))
+        tp1_mult = float(os.getenv('TP1_MULT', '1.4'))
+        tp2_mult = float(os.getenv('TP2_MULT', '2.8'))
+        require_structure = _env_bool('REQUIRE_STRUCTURE', True)
+        require_vwap = _env_bool('REQUIRE_VWAP', False)
 
-		trend_bull = ema_20 > ema_50 > ema_200
-		trend_bear = ema_20 < ema_50 < ema_200
+        close = last['close']
+        ema_50 = last['ema_50']
+        ema_200 = last['ema_200']
+        ema_200_slope = last['ema_200_slope']
+        ema_200_4h = last.get('ema_200_4h', np.nan)
+        sma_200_1d = last.get('sma_200_1d', np.nan)
+        structure = last['structure']
+        vwap = last['vwap']
+        chop = last['chop']
 
-		has_resistance = resistance == resistance
-		has_support = support == support
+        rsi = last['rsi']
+        rsi_prev = prev['rsi']
+        rsi_prev2 = prev2['rsi']
 
-		volume_ok = volume_sma_20 is not None and volume is not None and volume > volume_sma_20
+        macd_hist = last['macd_hist']
+        macd_hist_prev = prev['macd_hist']
 
-		tolerance = 0.005  # 0.5% autour des niveaux
-		near_support = has_support and abs(price - support) / price <= tolerance
-		near_resistance = has_resistance and abs(price - resistance) / price <= tolerance
+        atr = last['atr']
+        atr_pct = last['atr_pct']
+        atr_pct_sma_20 = last.get('atr_pct_sma_20', np.nan)
 
-		chop_trend_max = float(os.getenv('CHOP_TREND_MAX', '60'))
-		chop_range_min = float(os.getenv('CHOP_RANGE_MIN', '65'))
-		ema_gap_min = float(os.getenv('EMA_GAP_MIN', '0.0008'))
-		atr_pct_min = float(os.getenv('ATR_PCT_MIN', '0.0015'))
-		rsi_pullback_long_min = float(os.getenv('RSI_PULLBACK_LONG_MIN', '48'))
-		rsi_pullback_short_max = float(os.getenv('RSI_PULLBACK_SHORT_MAX', '52'))
-		use_range = os.getenv('USE_RANGE', 'false').lower() == 'true'
+        volume = last['volume']
+        volume_ratio = last['volume_ratio']
 
-		trending_market = chop is not None and chop < chop_trend_max
-		ranging_market = chop is not None and chop > chop_range_min
-		no_trade_zone = chop is not None and chop_trend_max <= chop <= chop_range_min
+        recent_highs = df.iloc[-6:-2]['high'].values
+        recent_lows = df.iloc[-6:-2]['low'].values
 
-		atr_pct = (atr / price) if atr is not None and price else None
-		volatility_ok = atr_pct is not None and atr_pct >= atr_pct_min
+        bb_squeeze = last.get('bb_squeeze', False)
+        bb_upper = last.get('bb_upper', np.nan)
+        bb_lower = last.get('bb_lower', np.nan)
 
-		ema_gap = abs(ema_20 - ema_50) / price if price else None
-		trend_strength = ema_gap is not None and ema_gap > ema_gap_min
+        if volume_ratio < vol_floor:
+            return StrategySignal(signal="NEUTRAL", reason="Volume trop faible", context={"volume_ratio": volume_ratio})
+        if chop > chop_block:
+            return StrategySignal(signal="NEUTRAL", reason="Marché trop choppy", context={"chop": chop})
+        if atr_pct < atr_silence:
+            return StrategySignal(signal="NEUTRAL", reason="Volatilité trop compressée", context={"atr_pct": atr_pct})
 
-		prev_rsi = prev.get('rsi')
-		rsi_cross_up = prev_rsi is not None and rsi is not None and prev_rsi <= 50 and rsi > 50
-		rsi_cross_down = prev_rsi is not None and rsi is not None and prev_rsi >= 50 and rsi < 50
+        htf_up = (np.isnan(ema_200_4h) or close > ema_200_4h) and (np.isnan(sma_200_1d) or close > sma_200_1d)
+        htf_down = (np.isnan(ema_200_4h) or close < ema_200_4h) and (np.isnan(sma_200_1d) or close < sma_200_1d)
 
-		trend_long_ok = (
-			trend_bull and
-			price > ema_200 and
-			ema_200_slope is not None and ema_200_slope > 0 and
-			ema_200_slope_10 is not None and ema_200_slope_10 > 0 and
-			trend_strength and
-			trending_market and
-			volatility_ok
-		)
+        trend_bullish = (
+            close > ema_200 and ema_50 > ema_200 and ema_200_slope > 0 and htf_up and
+            (structure == 'BULLISH' if require_structure else structure != 'BEARISH') and
+            (close > vwap if require_vwap else True)
+        )
+        trend_bearish = (
+            close < ema_200 and ema_50 < ema_200 and ema_200_slope < 0 and htf_down and
+            (structure == 'BEARISH' if require_structure else structure != 'BULLISH') and
+            (close < vwap if require_vwap else True)
+        )
+        if not (trend_bullish or trend_bearish):
+            return StrategySignal(signal="NEUTRAL", reason="Pas de tendance claire", context={"structure": structure})
 
-		trend_short_ok = (
-			trend_bear and
-			price < ema_200 and
-			ema_200_slope is not None and ema_200_slope < 0 and
-			ema_200_slope_10 is not None and ema_200_slope_10 < 0 and
-			trend_strength and
-			trending_market and
-			volatility_ok
-		)
+        rsi_pullback_long = (rsi_prev < 50 <= rsi) or (rsi_prev < rsi and rsi > 48)
+        rsi_pullback_short = (rsi_prev > 50 >= rsi) or (rsi_prev > rsi and rsi < 52)
+        macd_turn_long = macd_hist_prev < 0 <= macd_hist
+        macd_turn_short = macd_hist_prev > 0 >= macd_hist
+        pullback_long = rsi_pullback_long or macd_turn_long
+        pullback_short = rsi_pullback_short or macd_turn_short
 
-		pullback_long = trend_bull and price >= ema_20 and rsi is not None and rsi >= rsi_pullback_long_min and rsi_delta is not None and rsi_delta > 0
-		pullback_short = trend_bear and price <= ema_20 and rsi is not None and rsi <= rsi_pullback_short_max and rsi_delta is not None and rsi_delta < 0
+        atr_expanded = True if np.isnan(atr_pct_sma_20) else atr_pct >= atr_expansion_mult * atr_pct_sma_20
+        breakout_high = close > max(recent_highs) + 0.03 * atr
+        breakout_low = close < min(recent_lows) - 0.03 * atr
+        reject_short = last['high'] > ema_50 and close < ema_50 and close < last['open']
+        reject_long = last['low'] < ema_50 and close > ema_50 and close > last['open']
+        squeeze_break_long = bb_squeeze and close > bb_upper
+        squeeze_break_short = bb_squeeze and close < bb_lower
+        vol_confirm = volume_ratio >= vol_spike and atr_expanded
 
-		# Zone neutre => pas de trade
-		if no_trade_zone:
-			return StrategySignal(
-				signal="NEUTRAL",
-				reason="Marché indécis (CHOP moyen)",
-				context={
-					"price": price,
-					"rsi": rsi,
-					"chop": chop,
-					"ema_20": ema_20,
-					"ema_50": ema_50,
-					"ema_200": ema_200,
-					"ema_200_slope": ema_200_slope,
-					"ema_50_slope": ema_50_slope,
-					"support": support,
-					"resistance": resistance,
-					"trend": "BULLISH" if trend_bull else "BEARISH" if trend_bear else "NEUTRAL"
-				}
-			)
+        trigger_long = trend_bullish and pullback_long and vol_confirm and (squeeze_break_long or breakout_high)
+        trigger_short = trend_bearish and pullback_short and vol_confirm and (squeeze_break_short or breakout_low or reject_short)
 
-		# Trend-following (cross ou pullback)
-		if trend_long_ok and (rsi_cross_up or pullback_long) and price > ema_20 and volume_ok:
-			return StrategySignal(
-				signal="BUY",
-				reason="Tendance haussière + RSI (cross/pullback) + volume",
-				context={
-					"price": price,
-					"rsi": rsi,
-					"chop": chop,
-					"ema_20": ema_20,
-					"ema_50": ema_50,
-					"ema_200": ema_200,
-					"ema_200_slope": ema_200_slope,
-					"ema_50_slope": ema_50_slope,
-					"support": support,
-					"resistance": resistance,
-					"trend": "BULLISH"
-				}
-			)
+        if trigger_long:
+            stop_loss = min(last['low'], close - atr_stop_mult * atr)
+            tp1 = close + tp1_mult * atr
+            tp2 = close + tp2_mult * atr
+            return StrategySignal(
+                signal="BUY",
+                reason="Tendance haussière + pullback momentum + breakout/squeeze + volume",
+                context={"entry": close, "rsi": rsi, "macd_hist": macd_hist, "volume_ratio": volume_ratio, "structure": structure, "trend": "BULLISH"},
+                stop_loss=stop_loss,
+                take_profit_1=tp1,
+                take_profit_2=tp2
+            )
 
-		if trend_short_ok and (rsi_cross_down or pullback_short) and price < ema_20 and volume_ok:
-			return StrategySignal(
-				signal="SELL",
-				reason="Tendance baissière + RSI (cross/pullback) + volume",
-				context={
-					"price": price,
-					"rsi": rsi,
-					"chop": chop,
-					"ema_20": ema_20,
-					"ema_50": ema_50,
-					"ema_200": ema_200,
-					"ema_200_slope": ema_200_slope,
-					"ema_50_slope": ema_50_slope,
-					"support": support,
-					"resistance": resistance,
-					"trend": "BEARISH"
-				}
-			)
+        if trigger_short:
+            stop_loss = max(last['high'], close + atr_stop_mult * atr)
+            tp1 = close - tp1_mult * atr
+            tp2 = close - tp2_mult * atr
+            return StrategySignal(
+                signal="SELL",
+                reason="Tendance baissière + pullback momentum + breakout/squeeze + volume",
+                context={"entry": close, "rsi": rsi, "macd_hist": macd_hist, "volume_ratio": volume_ratio, "structure": structure, "trend": "BEARISH"},
+                stop_loss=stop_loss,
+                take_profit_1=tp1,
+                take_profit_2=tp2
+            )
 
-		# Mean-reversion en range (optionnel)
-		if use_range and ranging_market and volatility_ok and near_support and rsi is not None and rsi < 40 and rsi_delta is not None and rsi_delta > 0:
-			return StrategySignal(
-				signal="BUY",
-				reason="Range: rebond support + RSI bas",
-				context={
-					"price": price,
-					"rsi": rsi,
-					"chop": chop,
-					"support": support,
-					"resistance": resistance,
-					"trend": "RANGE"
-				}
-			)
-
-		if use_range and ranging_market and volatility_ok and near_resistance and rsi is not None and rsi > 60 and rsi_delta is not None and rsi_delta < 0:
-			return StrategySignal(
-				signal="SELL",
-				reason="Range: rejet résistance + RSI haut",
-				context={
-					"price": price,
-					"rsi": rsi,
-					"chop": chop,
-					"support": support,
-					"resistance": resistance,
-					"trend": "RANGE"
-				}
-			)
-
-		return StrategySignal(
-			signal="NEUTRAL",
-			reason="Aucun setup valide",
-			context={
-				"price": price,
-				"rsi": rsi,
-				"chop": chop,
-				"ema_20": ema_20,
-				"ema_50": ema_50,
-				"ema_200": ema_200,
-				"ema_200_slope": ema_200_slope,
-				"ema_50_slope": ema_50_slope,
-				"support": support,
-				"resistance": resistance,
-				"trend": "BULLISH" if trend_bull else "BEARISH" if trend_bear else "NEUTRAL"
-			}
-		)
+        return StrategySignal(
+            signal="NEUTRAL",
+            reason="Conditions partielles mais trigger manquant",
+            context={"trend_bullish": trend_bullish, "trend_bearish": trend_bearish, "pullback_long": pullback_long, "pullback_short": pullback_short, "volume_ratio": volume_ratio}
+        )
