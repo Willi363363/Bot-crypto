@@ -1,107 +1,122 @@
-"""
-Grid search des paramètres de stratégie sans refetcher les données.
-"""
 import os
 from pathlib import Path
 from datetime import timezone
-import itertools
 
 import ccxt
+import optuna
 import pandas as pd
+from dotenv import load_dotenv
 
 from src.indicators import TechnicalIndicators
-from test_backtest import fetch_all_ohlcv, build_dataframe, compute_trades, compute_stats
+from test_backtest import build_dataframe, compute_stats, compute_trades, fetch_all_ohlcv
+
+load_dotenv()
+
+# Cache global pour éviter de recharger les données à chaque essai
+_df_cache = None
 
 
-def main():
-    symbol = os.getenv('SYMBOL', 'BTC/USDT')
-    timeframe = '1h'
-    hist_exchange_name = os.getenv('HIST_EXCHANGE', 'binance')
-    start_date = os.getenv('START_DATE', '2017-08-17')
-    initial_capital = float(os.getenv('INITIAL_CAPITAL', '10'))
+def load_dataset():
+    global _df_cache
+    if _df_cache is not None:
+        return _df_cache
 
-    exchange = getattr(ccxt, hist_exchange_name)({'enableRateLimit': True})
+    symbol = os.getenv("SYMBOL", "BTC/USDT")
+    timeframe = os.getenv("TIMEFRAME", "1h")
+    hist_exchange_name = os.getenv("HIST_EXCHANGE", "binance")
+    start_date = os.getenv("START_DATE", "2017-08-17")
+
+    exchange = getattr(ccxt, hist_exchange_name)({"enableRateLimit": True})
     since_ms = int(pd.Timestamp(start_date, tz=timezone.utc).timestamp() * 1000)
 
-    cache_dir = Path("/home/willi363/projet/perso/Bot-crypto/data")
+    cache_dir = Path("data")
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_dir / f"ohlcv_{hist_exchange_name}_{symbol.replace('/', '-')}_{timeframe}.csv"
 
     if cache_file.exists():
-        print(f"✅ Chargement du cache: {cache_file.name}")
-        df = pd.read_csv(cache_file)
-        if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
-            df.set_index('timestamp', inplace=True)
-        else:
-            # Compatibilité : première colonne considérée comme timestamp si pas de nom
-            first_col = df.columns[0]
-            df[first_col] = pd.to_datetime(df[first_col], utc=True)
-            df.set_index(first_col, inplace=True)
-            df.index.name = 'timestamp'
+        df = pd.read_csv(cache_file, parse_dates=["timestamp"], index_col="timestamp")
     else:
-        print(f"🚀 Récupération historique {symbol} en {timeframe} depuis {start_date} (source: {hist_exchange_name})...")
-        ohlcv = fetch_all_ohlcv(exchange, symbol, timeframe=timeframe, since_ms=since_ms, limit=720)
-
-        if not ohlcv:
-            print("❌ Aucune donnée récupérée.")
-            return
-
+        ohlcv = fetch_all_ohlcv(exchange, symbol, timeframe, since_ms, limit=720)
         df = build_dataframe(ohlcv)
         df.reset_index().to_csv(cache_file, index=False)
-        df.set_index('timestamp', inplace=True)
+        df.set_index("timestamp", inplace=True)
 
     df = TechnicalIndicators.add_all_indicators(df)
+    _df_cache = df
+    return df
 
-    print(f"✅ {len(df)} bougies prêtes pour la grille.")
 
-    # Grille étendue (tous les paramètres clés du .env). Ajuste les listes selon ton besoin.
-    param_grid = {
-        "VOLUME_RATIO_MIN": [0.70, 0.80, 0.90],
-        "VOLUME_SPIKE_MIN": [1.25, 1.40, 1.55],
-        "CHOP_NO_TRADE_MAX": [52, 55, 58, 60],
-        "ATR_PCT_MIN": [0.0035, 0.0045, 0.0055],
-        "ATR_EXTREME_MULT": [2.5, 3.0, 3.5],
-        "RSI_MIN": [36, 38, 40, 42],
-        "RSI_MAX": [58, 60, 62, 64],
-        "ATR_STOP_MULT": [1.8, 2.0, 2.2],
-        "TP1_MULT": [1.6, 1.85, 2.0],
-        "TP2_MULT": [3.0, 3.3, 3.6],
-        "COOLDOWN_BARS": [10, 14, 16, 18],
-        "COOLDOWN_BARS_SL": [16, 20, 22, 24],
-        "TIME_STOP_BARS": [24, 28, 32, 36],
-        "RISK_PER_TRADE": [0.0025, 0.004, 0.006, 0.008],
-        "REQUIRE_VOLUME_SPIKE": ["true", "false"],
+def apply_params_to_env(params: dict):
+    for key, value in params.items():
+        os.environ[key] = str(value)
+
+
+# Espace de recherche (bornes raisonnables autour des valeurs actuelles)
+
+
+def objective(trial):
+    df = load_dataset()
+
+    params = {
+        "VOLUME_RATIO_MIN": trial.suggest_float("VOLUME_RATIO_MIN", 0.50, 1.00),
+        "VOLUME_SPIKE_MIN": trial.suggest_float("VOLUME_SPIKE_MIN", 1.05, 1.80),
+        "CHOP_NO_TRADE_MAX": trial.suggest_float("CHOP_NO_TRADE_MAX", 45.0, 75.0),
+        "ATR_PCT_MIN": trial.suggest_float("ATR_PCT_MIN", 0.0020, 0.0090),
+        "ATR_EXTREME_MULT": trial.suggest_float("ATR_EXTREME_MULT", 2.0, 4.0),
+        "RSI_MIN": trial.suggest_int("RSI_MIN", 30, 48),
+        "RSI_MAX": trial.suggest_int("RSI_MAX", 55, 72),
+        "ATR_STOP_MULT": trial.suggest_float("ATR_STOP_MULT", 1.2, 2.8),
+        "TP1_MULT": trial.suggest_float("TP1_MULT", 1.2, 2.4),
+        "TP2_MULT": trial.suggest_float("TP2_MULT", 2.2, 4.2),
+        "COOLDOWN_BARS": trial.suggest_int("COOLDOWN_BARS", 6, 26),
+        "COOLDOWN_BARS_SL": trial.suggest_int("COOLDOWN_BARS_SL", 8, 32),
+        "TIME_STOP_BARS": trial.suggest_int("TIME_STOP_BARS", 16, 48),
     }
 
-    max_combos_env = os.getenv('MAX_COMBOS')
-    max_combos = int(max_combos_env) if max_combos_env else None
+    # Contraintes simples pour garder des combinaisons réalistes
+    if params["RSI_MAX"] <= params["RSI_MIN"] + 3:
+        raise optuna.TrialPruned()
+    if params["COOLDOWN_BARS_SL"] < params["COOLDOWN_BARS"]:
+        params["COOLDOWN_BARS_SL"] = params["COOLDOWN_BARS"] + 2
 
-    key_list = list(param_grid.keys())
-    value_lists = [param_grid[k] for k in key_list]
-    combos = list(itertools.product(*value_lists))
-    total = len(combos)
-    if max_combos:
-        combos = combos[:max_combos]
-        total = len(combos)
-    print(f"🔍 Exploration de {total} combinaisons (MAX_COMBOS={'∞' if not max_combos_env else max_combos}).")
+    apply_params_to_env(params)
 
-    results = []
-    for idx, vals in enumerate(combos, 1):
-        for k, v in zip(key_list, vals):
-            os.environ[k] = str(v)
-        trades, _ = compute_trades(df)
-        stats = compute_stats(trades, "Depuis le début", initial_capital)
-        results.append((stats['final_capital'], stats['total_return'], stats['trades'], dict(zip(key_list, vals))))
-        if idx % 25 == 0 or idx == total:
-            print(f"Progression: {idx}/{total} combinaisons ({idx/total*100:.1f}%)")
+    initial_capital = float(os.getenv("INITIAL_CAPITAL", "100"))
+    warmup_bars = int(os.getenv("WARMUP_BARS", "220"))
 
-    results.sort(reverse=True, key=lambda x: x[0])
+    trades, _ = compute_trades(df, warmup_bars=warmup_bars)
+    stats = compute_stats(trades, "trial", initial_capital)
 
-    print("\nTop 20 configurations par capital final (Depuis le début):")
-    for rank, (final_cap, total_return, trades, param_set) in enumerate(results[:20], 1):
-        params_str = " ".join(f"{k}={v}" for k, v in param_set.items())
-        print(f"{rank:02d} | Capital: {final_cap:.2f} € | Retour: {total_return*100:.2f}% | Trades: {trades} | {params_str}")
+    # Écarter les configurations trop peu actives
+    if stats["trades"] < 6:
+        raise optuna.TrialPruned()
+
+    return stats["final_capital"]
+
+
+def main():
+    n_trials = int(os.getenv("GRID_TRIALS", "500"))
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials, n_jobs=1, show_progress_bar=True)
+
+    best_params = study.best_params
+    apply_params_to_env(best_params)
+
+    df = load_dataset()
+    initial_capital = float(os.getenv("INITIAL_CAPITAL", "100"))
+    warmup_bars = int(os.getenv("WARMUP_BARS", "220"))
+    trades, _ = compute_trades(df, warmup_bars=warmup_bars)
+    stats = compute_stats(trades, "best", initial_capital)
+
+    print("\nMeilleure configuration :")
+    for k, v in best_params.items():
+        print(f"- {k} = {v}")
+
+    print("\nPerformances avec les meilleurs paramètres :")
+    print(f"Trades: {stats['trades']}")
+    print(f"Capital final: {stats['final_capital']:.2f} €")
+    print(f"Rendement: {stats['total_return'] * 100:.2f}%")
+    print(f"Win rate: {stats['win_rate'] * 100:.2f}%")
 
 
 if __name__ == "__main__":

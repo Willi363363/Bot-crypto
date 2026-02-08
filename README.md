@@ -17,7 +17,7 @@ Ce projet est un bot Python conçu pour surveiller le marché **BTCUSDT** (Bitco
 - **Notifications Discord** : Envoi automatique des signaux via un webhook Discord.
 - **Gestion d'état** : Suivi de l'état du bot et des positions ouvertes/fermées.
 - **Backtests** : Backtest 1h avec capital initial, frais, SL/TP dynamiques (ATR).
-- **Grille de paramètres** : Recherche automatique des meilleurs seuils.
+- **Grille de paramètres** : Optimisation Optuna des seuils clés (volume, RSI, ATR, TP/SL, cooldown).
 - **Tests automatisés** : Scripts de test pour vérifier la connexion à l'API Kraken et simuler des scénarios.
 
 ---
@@ -106,10 +106,14 @@ Le bot affichera les signaux générés dans la console et les enverra égalemen
      python test_backtest.py
      ```
 
-5. **Lancer la grille de paramètres** :
+5. **Lancer la grille de paramètres (Optuna)** :
      ```bash
      python test_grid_search.py
      ```
+   Vous pouvez ajuster le nombre d'essais avec `GRID_TRIALS` (par défaut 250) :
+   ```bash
+   GRID_TRIALS=100 python test_grid_search.py
+   ```
 
 ## 📊 Exemple de signal Discord
 
@@ -130,41 +134,46 @@ Voici un exemple de message envoyé via le webhook Discord :
 ### Paramètres de stratégie (via `.env`)
 
 ```bash
-# Seuils de régime
-CHOP_TREND_MAX=55
-CHOP_RANGE_MIN=65
+# ═══════════════ FILTRES MACRO ═══════════════
+VOLUME_RATIO_MIN=0.55
+VOLUME_SPIKE_MIN=1.10
+CHOP_NO_TRADE_MAX=60
+ATR_PCT_MIN=0.0045
+ATR_EXTREME_MULT=2.5
 
-# Force de tendance / volatilité
-EMA_GAP_MIN=0.0006
-ATR_PCT_MIN=0.001
+# ═══════════════ MOMENTUM ═══════════════
+RSI_MIN=38
+RSI_MAX=62
 
-# RSI pullback
-RSI_PULLBACK_LONG_MIN=48
-RSI_PULLBACK_SHORT_MAX=52
-
-# Range optionnel (true/false)
-USE_RANGE=false
+# ═══════════════ RISK MANAGEMENT ═══════════════
+ATR_STOP_MULT=2.0
+TP1_MULT=1.85
+TP2_MULT=3.30
+COOLDOWN_BARS=16
+COOLDOWN_BARS_SL=22
+TIME_STOP_BARS=28
 ```
 
 ### Paramètres de backtest (via `.env`)
 
 ```bash
-INITIAL_CAPITAL=10
+INITIAL_CAPITAL=100
 FEE_RATE=0.0004
-USE_ATR_STOPS=true
-ATR_MULT_SL=1.5
-ATR_MULT_TP=2.5
-COOLDOWN_BARS=3
-LONG_ONLY=true
+SLIPPAGE_BPS=0.0002
+HIST_EXCHANGE=binance
+START_DATE=2023-01-01
+WARMUP_BARS=220
+LONG_ONLY=false
+PLOT_TRADES=true
 ```
 
-## Configuration (défaut)
+## Configuration (défaut / exemple optimisé)
 - Exchange: `kraken`, Pair: `BTC/USDT`, Timeframe: `1h`
-- Volume: `VOLUME_RATIO_MIN=0.98`, `VOLUME_SPIKE_MIN=1.40`
-- Volatilité/filtre chop: `CHOP_NO_TRADE_MAX=48`, `ATR_PCT_MIN=0.0065`, `ATR_EXPANSION_MULT=1.15`
-- Gestion du risque: `ATR_STOP_MULT=0.95`, `TP1_MULT=1.8`, `TP2_MULT=3.4`
-- Cooldown: `COOLDOWN_BARS=10`, `COOLDOWN_BARS_SL=18`, `TIME_STOP_BARS=36`
-- Backtest: `HIST_EXCHANGE=binance`, `START_DATE=2024-01-01`, `FEE_RATE=0.0005`, `SLIPPAGE_BPS=0.00025`
+- Filtres macro (exemple issu d'une opti): `VOLUME_RATIO_MIN≈0.54`, `VOLUME_SPIKE_MIN≈1.10`, `CHOP_NO_TRADE_MAX≈60`, `ATR_PCT_MIN≈0.0046`, `ATR_EXTREME_MULT≈2.45`
+- Momentum: `RSI_MIN≈39`, `RSI_MAX≈61`
+- Gestion du risque: `ATR_STOP_MULT≈2.54`, `TP1_MULT≈1.81`, `TP2_MULT≈2.99`
+- Cooldown: `COOLDOWN_BARS=7`, `COOLDOWN_BARS_SL=32`, `TIME_STOP_BARS=38`
+- Backtest: `HIST_EXCHANGE=binance`, `START_DATE=2023-01-01`, `FEE_RATE=0.0004`, `SLIPPAGE_BPS=0.0002`
 
 ## ⚠️ Avertissements
 
