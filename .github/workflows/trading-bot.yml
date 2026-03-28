@@ -1,11 +1,11 @@
-name: Trading Bot - Analyse horaire
+name: Trading Bot - Scheduled Analysis
 
 on:
   schedule:
-    # Exécution toutes les heures (à la minute 5)
+    # Run every 5 minutes
     - cron: '*/5 * * * *'
 
-  # Permet aussi le déclenchement manuel
+  # Also allow manual execution from the Actions tab
   workflow_dispatch:
 
 jobs:
@@ -13,22 +13,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout du code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐍 Configuration Python 3.11
+      - name: 🐍 Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 📦 Installation des dépendances
+      - name: 📦 Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Récupération de l'état précédent (s'il existe)
-      - name: 📂 Téléchargement de l'état précédent
+      # Restore previous state if available
+      - name: 📂 Restore previous state
         uses: actions/cache@v4
         with:
           path: state.json
@@ -36,7 +36,7 @@ jobs:
           restore-keys: |
             bot-state-
 
-      - name: 🤖 Exécution du bot
+      - name: 🤖 Run bot
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_HEARTBEAT_WEBHOOK_URL: ${{ secrets.DISCORD_HEARTBEAT_WEBHOOK_URL }}
@@ -75,12 +75,12 @@ jobs:
           REQUIRE_MACD: 'false'
           REQUIRE_VOLUME_SPIKE: 'true'
         run: |
-          echo "🚀 Démarrage de l'analyse..."
+          echo "🚀 Starting analysis..."
           python main.py
-          echo "✅ Analyse terminée"
+          echo "✅ Analysis completed"
 
-      # Sauvegarde du nouvel état
-      - name: 💾 Sauvegarde de l'état
+      # Save updated state
+      - name: 💾 Save state
         uses: actions/cache/save@v4
         if: always()
         with:

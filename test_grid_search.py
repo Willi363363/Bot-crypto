@@ -95,7 +95,7 @@ def objective(trial):
 
 
 def main():
-    n_trials = int(os.getenv("GRID_TRIALS", "500"))
+    n_trials = int(os.getenv("GRID_TRIALS", "20"))
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=n_trials, n_jobs=1, show_progress_bar=True)
 

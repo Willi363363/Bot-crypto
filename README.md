@@ -1,189 +1,155 @@
-# Crypto Trading Bot - BTCUSDT Signals
+# Crypto Trading Bot
 
-Un bot de trading automatisé qui analyse le marché **BTCUSDT** et envoie des signaux d'achat/vente via un webhook Discord. Les données de prix sont récupérées en temps réel depuis l'**API Kraken**.
+[![Scheduled Analysis](https://github.com/Willi363363/Bot-crypto/actions/workflows/trading-bot.yml/badge.svg?branch=dev)](https://github.com/Willi363363/Bot-crypto/actions/workflows/trading-bot.yml)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
+Python trading-signal bot for BTC/USDT with Discord notifications, backtesting, and parameter optimization.
 
-## 📌 Description
+This project is focused on learning and experimentation: strategy design, indicator engineering, and reproducible evaluation.
 
-Ce projet est un bot Python conçu pour surveiller le marché **BTCUSDT** (Bitcoin/USDT) sur Kraken. Il génère des signaux d'achat ou de vente en fonction d'indicateurs techniques ou de règles personnalisées. Les signaux sont envoyés en temps réel via un **webhook Discord**, ce qui permet une intégration facile avec des serveurs Discord pour une notification instantanée.
+## Features
 
----
+- Real-time market data using CCXT (default exchange: Kraken).
+- Technical indicator pipeline (EMA, RSI, ATR, MACD, VWAP, Bollinger squeeze, market structure).
+- Rule-based strategy that returns BUY, SELL, or NEUTRAL signals.
+- Discord notifications for signals and heartbeat status.
+- Stateful signal deduplication via `state.json`.
+- Backtest engine with fees, slippage, ATR-based stop/take-profit, partial TP, and cooldown logic.
+- Optuna grid search for strategy parameter tuning.
+- GitHub Actions workflow for scheduled runs.
 
-## 🔧 Fonctionnalités
+## Project Structure
 
-- **Analyse de marché en temps réel** : Récupération des prix depuis l'API Kraken.
-- **Indicateurs techniques** : Utilisation d'indicateurs personnalisés pour la prise de décision.
-- **Notifications Discord** : Envoi automatique des signaux via un webhook Discord.
-- **Gestion d'état** : Suivi de l'état du bot et des positions ouvertes/fermées.
-- **Backtests** : Backtest 1h avec capital initial, frais, SL/TP dynamiques (ATR).
-- **Grille de paramètres** : Optimisation Optuna des seuils clés (volume, RSI, ATR, TP/SL, cooldown).
-- **Tests automatisés** : Scripts de test pour vérifier la connexion à l'API Kraken et simuler des scénarios.
+| Path | Purpose |
+| --- | --- |
+| `main.py` | Main entry point: fetch data, compute indicators, generate signal, send notifications. |
+| `src/data_fetcher.py` | OHLCV/ticker retrieval via CCXT. |
+| `src/indicators.py` | Indicator calculations and feature engineering. |
+| `src/strategy.py` | Main strategy logic (`ImprovedStrategy`). |
+| `src/notifier.py` | Discord webhook messaging (signal + heartbeat + test mode). |
+| `src/state_manager.py` | Persistent state to avoid duplicate alerts. |
+| `test_connection.py` | Manual connectivity and Discord test script. |
+| `test_new_strategy.py` | Manual strategy sanity-check script. |
+| `test_simulation.py` | Loop runner for local test mode. |
+| `test_backtest.py` | Historical backtesting and chart output. |
+| `test_grid_search.py` | Optuna optimization script. |
+| `.github/workflows/trading-bot.yml` | Scheduled GitHub Actions execution. |
 
----
+## Requirements
 
-## 📦 Structure du projet
+- Python 3.11+ recommended.
+- A Discord webhook URL.
+- Internet connection for exchange data.
 
-| Fichier | Description |
-|---------|-------------|
-| `main.py` | Point d'entrée principal du bot. |
-| `src/data_fetcher.py` | Récupère les données de marché depuis l'API Kraken. |
-| `src/indicators.py` | Contient les indicateurs techniques utilisés pour générer les signaux. |
-| `src/notifier.py` | Gère l'envoi des notifications via le webhook Discord. |
-| `src/state_manager.py` | Suivi de l'état du bot et des positions. |
-| `src/strategy.py` | Logique de stratégie de trading. |
-| `config/config.py` | Configuration de base de l'application. |
-| `test_connection.py` | Teste la connexion à l'API Kraken. |
-| `test_simulation.py` | Simule des scénarios de trading pour valider la logique du bot. |
-| `test_backtest.py` | Backtest 1h avec capital initial, frais et SL/TP. |
-| `test_grid_search.py` | Grille de paramètres pour optimiser la stratégie. |
-| `requirements.txt` | Liste des dépendances Python nécessaires. |
+## Quick Start
 
----
-
-## ⚙️ Prérequis
-
-- Python 3.8 ou supérieur
-- Un compte Discord avec les permissions pour créer un webhook
-- Un compte Kraken et une clé API pour récupérer les données de marché
-
----
-
-## 🛠️ Installation
-
-1. **Cloner le dépôt** :
-     ```bash
-     git clone https://github.com/votre-utilisateur/crypto-trading-bot.git
-     cd crypto-trading-bot
-     ```
-
-2. **Installer les dépendances** :
-     ```bash
-     pip install -r requirements.txt
-     ```
-
-3. **Configurer le webhook Discord** :
-      - Créez un webhook Discord dans votre serveur (Paramètres du serveur > Intégrations > Webhooks).
-      - Ajoutez l'URL dans le fichier `.env` :
-           ```bash
-           DISCORD_WEBHOOK_URL=votre_url_de_webhook
-           DISCORD_HEARTBEAT_WEBHOOK_URL=votre_url_de_webhook_heartbeat
-           ```
-
-4. **Configurer l'API Kraken** :
-     - Créez une clé API sur votre compte Kraken (Paramètres > API).
-     - Ajoutez vos clés API dans un fichier `.env` à la racine du projet :
-         ```bash
-         KRAKEN_API_KEY=votre_cle_api_kraken
-         KRAKEN_API_SECRET=votre_secret_api_kraken
-         ```
-
-## 🚀 Utilisation
-
-1. **Lancer le bot** :
-     ```bash
-     python main.py
-     ```
-
-2. **Vérifier les logs** :
-
-Le bot affichera les signaux générés dans la console et les enverra également via le webhook Discord.
-
-3. **Exécuter les tests** :
-
-- Pour tester la connexion à l'API Kraken :
-    ```bash
-    python test_connection.py
-    ```
-
-- Pour simuler des scénarios de trading :
-    ```bash
-    python test_simulation.py
-    ```
-
-4. **Backtester la stratégie (1h)** :
-     ```bash
-     python test_backtest.py
-     ```
-
-5. **Lancer la grille de paramètres (Optuna)** :
-     ```bash
-     python test_grid_search.py
-     ```
-   Vous pouvez ajuster le nombre d'essais avec `GRID_TRIALS` (par défaut 250) :
-   ```bash
-   GRID_TRIALS=100 python test_grid_search.py
-   ```
-
-## 📊 Exemple de signal Discord
-
-Voici un exemple de message envoyé via le webhook Discord :
-```text
-🔍 Nouveau signal BTCUSDT
-📈 Acheter à 50000 USDT
-⏰ Heure : 2026-02-06 14:30:00 UTC
-📊 Indicateur : RSI > 70 (Surachat)
-```
-
-## 📝 Personnalisation
-
-- **Ajouter des indicateurs** : Modifiez le fichier `src/indicators.py` pour ajouter vos propres indicateurs techniques.
-- **Changer la stratégie** : Adaptez la logique dans `src/strategy.py`.
-- **Personnaliser les notifications** : Modifiez le format des messages dans `src/notifier.py`.
-
-### Paramètres de stratégie (via `.env`)
+1. Clone the repository.
 
 ```bash
-# ═══════════════ FILTRES MACRO ═══════════════
-VOLUME_RATIO_MIN=0.55
-VOLUME_SPIKE_MIN=1.10
-CHOP_NO_TRADE_MAX=60
-ATR_PCT_MIN=0.0045
-ATR_EXTREME_MULT=2.5
-
-# ═══════════════ MOMENTUM ═══════════════
-RSI_MIN=38
-RSI_MAX=62
-
-# ═══════════════ RISK MANAGEMENT ═══════════════
-ATR_STOP_MULT=2.0
-TP1_MULT=1.85
-TP2_MULT=3.30
-COOLDOWN_BARS=16
-COOLDOWN_BARS_SL=22
-TIME_STOP_BARS=28
+git clone https://github.com/Willi363363/Bot-crypto.git
+cd Bot-crypto
 ```
 
-### Paramètres de backtest (via `.env`)
+2. Create and activate a virtual environment.
 
 ```bash
-INITIAL_CAPITAL=100
-FEE_RATE=0.0004
-SLIPPAGE_BPS=0.0002
-HIST_EXCHANGE=binance
-START_DATE=2023-01-01
-WARMUP_BARS=220
-LONG_ONLY=false
-PLOT_TRADES=true
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-## Configuration (défaut / exemple optimisé)
-- Exchange: `kraken`, Pair: `BTC/USDT`, Timeframe: `1h`
-- Filtres macro (exemple issu d'une opti): `VOLUME_RATIO_MIN≈0.54`, `VOLUME_SPIKE_MIN≈1.10`, `CHOP_NO_TRADE_MAX≈60`, `ATR_PCT_MIN≈0.0046`, `ATR_EXTREME_MULT≈2.45`
-- Momentum: `RSI_MIN≈39`, `RSI_MAX≈61`
-- Gestion du risque: `ATR_STOP_MULT≈2.54`, `TP1_MULT≈1.81`, `TP2_MULT≈2.99`
-- Cooldown: `COOLDOWN_BARS=7`, `COOLDOWN_BARS_SL=32`, `TIME_STOP_BARS=38`
-- Backtest: `HIST_EXCHANGE=binance`, `START_DATE=2023-01-01`, `FEE_RATE=0.0004`, `SLIPPAGE_BPS=0.0002`
+3. Install dependencies.
 
-## ⚠️ Avertissements
+```bash
+pip install -r requirements.txt
+```
 
-Ce bot est fourni à titre éducatif. Ne tradez pas avec de l'argent réel sans avoir testé et validé la stratégie.
-Les marchés cryptographiques sont volatils. Utilisez ce bot à vos propres risques.
+4. Create your environment file.
 
-## 🤝 Contributions
+```bash
+cp .env.example .env
+```
 
-Les contributions sont les bienvenues ! Ouvrez une issue ou une pull request pour proposer des améliorations.
+5. Fill at least these keys in `.env`:
 
-## 📜 Licence
+- `DISCORD_WEBHOOK_URL`
+- `DISCORD_HEARTBEAT_WEBHOOK_URL` (optional, falls back to signal webhook)
 
-Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
+6. Run the bot.
+
+```bash
+python main.py
+```
+
+## Main Commands
+
+- Run live analysis once: `python main.py`
+- Test exchange + webhook flow: `python test_connection.py`
+- Run local loop in test mode: `python test_simulation.py`
+- Backtest strategy: `python test_backtest.py`
+- Run Optuna search: `python test_grid_search.py`
+
+Example with custom trials:
+
+```bash
+GRID_TRIALS=100 python test_grid_search.py
+```
+
+## Configuration
+
+All runtime settings are environment variables. See `.env.example` for the complete list.
+
+Important groups:
+
+- Market/runtime: `SYMBOL`, `TIMEFRAME`, `EXCHANGE`, `DATA_LIMIT`, `SEND_HEARTBEAT`
+- Discord: `DISCORD_WEBHOOK_URL`, `DISCORD_HEARTBEAT_WEBHOOK_URL`, `DISCORD_TEST_WEBHOOK_URL`, `TEST_MODE`
+- Strategy filters: `VOLUME_RATIO_MIN`, `VOLUME_SPIKE_MIN`, `CHOP_NO_TRADE_MAX`, `ATR_PCT_MIN`, `ATR_EXTREME_MULT`, `RSI_MIN`, `RSI_MAX`
+- Risk management: `ATR_STOP_MULT`, `TP1_MULT`, `TP2_MULT`, `COOLDOWN_BARS`, `COOLDOWN_BARS_SL`, `TIME_STOP_BARS`
+- Backtest: `INITIAL_CAPITAL`, `FEE_RATE`, `SLIPPAGE_BPS`, `HIST_EXCHANGE`, `START_DATE`, `WARMUP_BARS`, `LONG_ONLY`
+- Plotting: `PLOT_TRADES`, `PLOT_PATH`, `PLOT_DAYS`, `PLOT_MAX_BARS`, `PLOT_LABEL_TRADES`, `PLOT_DEBUG`, `PLOT_START_DATE`
+
+## GitHub Actions
+
+The workflow in `.github/workflows/trading-bot.yml` runs on a schedule and can also be triggered manually.
+
+Required GitHub repository secrets:
+
+- `DISCORD_WEBHOOK_URL`
+- `DISCORD_HEARTBEAT_WEBHOOK_URL`
+
+## Notes
+
+- `state.json` is intentionally local and ignored in Git.
+- `data/` is ignored and used as a cache for historical OHLCV CSV files.
+- This repository uses executable Python scripts for validation/backtesting rather than a full `pytest` suite.
+
+## Portfolio and Skills
+
+This repository is part of my software engineering learning journey as a first-year Epitech Montpellier student.
+
+What this project demonstrates:
+
+- Python application architecture with modular components.
+- Market data ingestion and feature engineering for time-series analysis.
+- Strategy implementation and rule-based decision systems.
+- Backtesting methodology with realistic constraints (fees, slippage, risk controls).
+- Practical DevOps basics with scheduled GitHub Actions workflows.
+- Documentation discipline and reproducible local setup.
+
+Current focus areas:
+
+- Writing cleaner tests and improving reliability.
+- Improving strategy robustness across market regimes.
+- Strengthening code quality standards for team collaboration.
+
+## Disclaimer
+
+This software is for educational purposes only. It is not financial advice. Use at your own risk.
+
+## Contributing
+
+See `CONTRIBUTING.md`.
+
+## License
+
+MIT License. See `LICENSE`.
